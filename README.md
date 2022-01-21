@@ -17,28 +17,43 @@ terraform {
 }
 ```
 
+Then run `terraform init`.
+
 ## Usage
 
 ```hcl
-# Define your Git repository and credentials in case of a private repository
-data "git_repository" "example" {
+# Clone the Git repository
+resource "git_repository" "example" {
   url = "https://example.com/repo-name"
   ref = "main"
 }
+```
 
-# Create a file in the Git repository without pushing
+```hcl
+# Create or edit a file in the Git repository without pushing
 resource "git_file" "hello_world" {
-  path    = "path/to/file.txt"
-  content = "Hello, World!"
+  repository = git_repository.example.dir
+  path       = "path/to/file.txt"
+  content    = "Hello, World!"
 }
+```
 
-# Commit your changes to the Git repository
+```hcl
+# Commit and push your changes to the Git repository
 resource "git_commit" "hello_world" {
-  message = "Create file.txt"
-}
+  repository = git_repository.example.dir
+  message    = "Create file.txt"
 
-# Read a file in the Git repository
+  add {
+    path = git_file.hello_world.path
+  }
+}
+```
+
+```hcl
+# Read an existing file in the Git repository
 data "git_file" "read_hello_world" {
+  repository = git_repository.example.dir
   path = "path/to/file.txt"
 }
 
@@ -49,13 +64,13 @@ output "hello_world" {
 
 ## Resources
 
+### git_repository
+
 ### git_file
 
 ### git_commit
 
 ## Data Sources
-
-### git_repository
 
 ### git_file
 
