@@ -1,6 +1,4 @@
-# terraform-provider-git
-
-[![Build Status](https://github.com/au2001/terraform-provider-git/workflows/release/badge.svg)](https://github.com/au2001/terraform-provider-git/actions)
+# terraform-provider-git &nbsp; [![Build Status](https://github.com/au2001/terraform-provider-git/workflows/release/badge.svg)](https://github.com/au2001/terraform-provider-git/actions)
 
 ## Synopsis
 
@@ -15,8 +13,8 @@ resource "git_repository" "example" {
 }
 
 resource "git_file" "hello_world" {
-  path = "path/to/file.txt"
-  contents = "Hello, World!"
+  path    = "path/to/file.txt"
+  content = "Hello, World!"
 }
 
 resource "git_commit" "hello_world" {
