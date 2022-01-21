@@ -24,14 +24,12 @@ func dataRepository() *schema.Resource {
 			"url": {
 				Type:         schema.TypeString,
 				Required:     true,
-				ForceNew:     true,
 				ValidateFunc: validation.IsURLWithScheme([]string{"http", "https", "ssh"}),
 			},
 			"ref": {
 				Type:     schema.TypeString,
 				Optional: true,
 				Default:  "main",
-				ForceNew: true,
 			},
 
 			"head": {
