@@ -1,12 +1,22 @@
 package provider
 
 import (
-	"github.com/hashicorp/terraform/helper/schema"
+	"context"
+
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-func DataFile() *schema.Resource {
+func dataFile() *schema.Resource {
 	return &schema.Resource{
+		ReadContext: dataFileRead,
+
 		Schema: map[string]*schema.Schema{
+			"repository": {
+				Type:     schema.TypeString,
+				Required: true,
+				ForceNew: true,
+			},
 			"path": {
 				Type:     schema.TypeString,
 				Required: true,
@@ -17,30 +27,9 @@ func DataFile() *schema.Resource {
 				Computed: true,
 			},
 		},
-		Create: dataFileCreate,
-		Read:   dataFileRead,
-		Update: dataFileUpdate,
-		Delete: dataFileDelete,
-		Exists: dataFileExists,
 	}
 }
 
-func dataFileCreate(d *schema.ResourceData, meta interface{}) error {
+func dataFileRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	return nil
-}
-
-func dataFileRead(d *schema.ResourceData, meta interface{}) error {
-	return nil
-}
-
-func dataFileUpdate(d *schema.ResourceData, meta interface{}) error {
-	return nil
-}
-
-func dataFileDelete(d *schema.ResourceData, meta interface{}) error {
-	return nil
-}
-
-func dataFileExists(d *schema.ResourceData, meta interface{}) (bool, error) {
-	return false, nil
 }

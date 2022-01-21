@@ -1,11 +1,19 @@
 package provider
 
 import (
-	"github.com/hashicorp/terraform/helper/schema"
+	"context"
+
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-func ResourceCommit() *schema.Resource {
+func resourceCommit() *schema.Resource {
 	return &schema.Resource{
+		CreateContext: resourceCommitCreate,
+		ReadContext:   resourceCommitRead,
+		// UpdateContext: resourceCommitUpdate,
+		DeleteContext: resourceCommitDelete,
+
 		Schema: map[string]*schema.Schema{
 			"message": {
 				Type:     schema.TypeString,
@@ -14,30 +22,21 @@ func ResourceCommit() *schema.Resource {
 				ForceNew: true,
 			},
 		},
-		Create: resourceCommitCreate,
-		Read:   resourceCommitRead,
-		Update: resourceCommitUpdate,
-		Delete: resourceCommitDelete,
-		Exists: resourceCommitExists,
 	}
 }
 
-func resourceCommitCreate(d *schema.ResourceData, meta interface{}) error {
+func resourceCommitCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	return nil
 }
 
-func resourceCommitRead(d *schema.ResourceData, meta interface{}) error {
+func resourceCommitRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	return nil
 }
 
-func resourceCommitUpdate(d *schema.ResourceData, meta interface{}) error {
-	return nil
-}
+// func resourceCommitUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+// 	return nil
+// }
 
-func resourceCommitDelete(d *schema.ResourceData, meta interface{}) error {
+func resourceCommitDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	return nil
-}
-
-func resourceCommitExists(d *schema.ResourceData, meta interface{}) (bool, error) {
-	return false, nil
 }

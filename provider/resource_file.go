@@ -1,11 +1,19 @@
 package provider
 
 import (
-	"github.com/hashicorp/terraform/helper/schema"
+	"context"
+
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
-func ResourceFile() *schema.Resource {
+func resourceFile() *schema.Resource {
 	return &schema.Resource{
+		CreateContext: resourceFileCreate,
+		ReadContext:   resourceFileRead,
+		// UpdateContext: resourceFileUpdate,
+		DeleteContext: resourceFileDelete,
+
 		Schema: map[string]*schema.Schema{
 			"path": {
 				Type:     schema.TypeString,
@@ -18,30 +26,21 @@ func ResourceFile() *schema.Resource {
 				ForceNew: true,
 			},
 		},
-		Create: resourceFileCreate,
-		Read:   resourceFileRead,
-		Update: resourceFileUpdate,
-		Delete: resourceFileDelete,
-		Exists: resourceFileExists,
 	}
 }
 
-func resourceFileCreate(d *schema.ResourceData, meta interface{}) error {
+func resourceFileCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	return nil
 }
 
-func resourceFileRead(d *schema.ResourceData, meta interface{}) error {
+func resourceFileRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	return nil
 }
 
-func resourceFileUpdate(d *schema.ResourceData, meta interface{}) error {
-	return nil
-}
+// func resourceFileUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+// 	return nil
+// }
 
-func resourceFileDelete(d *schema.ResourceData, meta interface{}) error {
+func resourceFileDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	return nil
-}
-
-func resourceFileExists(d *schema.ResourceData, meta interface{}) (bool, error) {
-	return false, nil
 }
