@@ -46,7 +46,7 @@ func resourceFileCreate(ctx context.Context, d *schema.ResourceData, meta interf
 	// Open already cloned repository
 	_, worktree, err := getRepository(dir)
 	if err != nil {
-		return diag.Errorf("failed to open repository: %s", err.Error())
+		return diag.Errorf("failed to open repository: %s", err)
 	}
 
 	d.SetId(filepath.Join(dir, path))
@@ -54,17 +54,17 @@ func resourceFileCreate(ctx context.Context, d *schema.ResourceData, meta interf
 	// Create, write then close file
 	file, err := worktree.Filesystem.Create(path)
 	if err != nil {
-		return diag.Errorf("failed to create file: %s", err.Error())
+		return diag.Errorf("failed to create file: %s", err)
 	}
 
 	_, err = io.WriteString(file, content)
 	if err != nil {
-		return diag.Errorf("failed to write to file: %s", err.Error())
+		return diag.Errorf("failed to write to file: %s", err)
 	}
 
 	err = file.Close()
 	if err != nil {
-		return diag.Errorf("failed to close file: %s", err.Error())
+		return diag.Errorf("failed to close file: %s", err)
 	}
 
 	return nil
@@ -80,29 +80,29 @@ func resourceFileRead(ctx context.Context, d *schema.ResourceData, meta interfac
 		d.SetId("")
 		return nil
 	} else if err != nil {
-		return diag.Errorf("failed to open repository: %s", err.Error())
+		return diag.Errorf("failed to open repository: %s", err)
+	}
+
+	// Open, read then close file
+	file, err := worktree.Filesystem.Open(path)
+	if err != nil && os.IsNotExist(err) {
+		d.SetId("")
+		return nil
+	} else if err != nil {
+		return diag.Errorf("failed to open file: %s", err)
 	}
 
 	d.SetId(filepath.Join(dir, path))
 
-	// Open, read then close file
-	file, err := worktree.Filesystem.Open(path)
-	if os.IsNotExist(err) {
-		d.SetId("")
-		return nil
-	} else if err != nil {
-		return diag.Errorf("failed to open file: %s", err.Error())
-	}
-
 	content, err := io.ReadAll(file)
 	if err != nil {
-		return diag.Errorf("failed to read file: %s", err.Error())
+		return diag.Errorf("failed to read file: %s", err)
 	}
 	d.Set("content", string(content))
 
 	err = file.Close()
 	if err != nil {
-		return diag.Errorf("failed to close file: %s", err.Error())
+		return diag.Errorf("failed to close file: %s", err)
 	}
 
 	return nil
@@ -116,7 +116,7 @@ func resourceFileUpdate(ctx context.Context, d *schema.ResourceData, meta interf
 	// Open already cloned repository
 	_, worktree, err := getRepository(dir)
 	if err != nil {
-		return diag.Errorf("failed to open repository: %s", err.Error())
+		return diag.Errorf("failed to open repository: %s", err)
 	}
 
 	d.SetId(filepath.Join(dir, path))
@@ -124,17 +124,17 @@ func resourceFileUpdate(ctx context.Context, d *schema.ResourceData, meta interf
 	// Truncate, write then close file
 	file, err := worktree.Filesystem.Create(path)
 	if err != nil {
-		return diag.Errorf("failed to truncate file: %s", err.Error())
+		return diag.Errorf("failed to truncate file: %s", err)
 	}
 
 	_, err = io.WriteString(file, content)
 	if err != nil {
-		return diag.Errorf("failed to write to file: %s", err.Error())
+		return diag.Errorf("failed to write to file: %s", err)
 	}
 
 	err = file.Close()
 	if err != nil {
-		return diag.Errorf("failed to close file: %s", err.Error())
+		return diag.Errorf("failed to close file: %s", err)
 	}
 
 	return nil
@@ -147,7 +147,7 @@ func resourceFileDelete(ctx context.Context, d *schema.ResourceData, meta interf
 	// Open already cloned repository
 	_, worktree, err := getRepository(dir)
 	if err != nil {
-		return diag.Errorf("failed to open repository: %s", err.Error())
+		return diag.Errorf("failed to open repository: %s", err)
 	}
 
 	d.SetId(filepath.Join(dir, path))
@@ -155,7 +155,7 @@ func resourceFileDelete(ctx context.Context, d *schema.ResourceData, meta interf
 	// Delete file
 	err = worktree.Filesystem.Remove(path)
 	if err != nil {
-		return diag.Errorf("failed to remove file: %s", err.Error())
+		return diag.Errorf("failed to remove file: %s", err)
 	}
 
 	return nil

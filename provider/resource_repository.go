@@ -98,7 +98,7 @@ func resourceRepositoryCreate(ctx context.Context, d *schema.ResourceData, meta 
 		var err error
 		dir, err = ioutil.TempDir("/tmp", "terraform-provider-git")
 		if err != nil {
-			return diag.Errorf("failed to create temporary directory: %s", err.Error())
+			return diag.Errorf("failed to create temporary directory: %s", err)
 		}
 
 		d.Set("dir", dir)
@@ -111,7 +111,7 @@ func resourceRepositoryCreate(ctx context.Context, d *schema.ResourceData, meta 
 		Depth:      1,
 	})
 	if err != nil {
-		return diag.Errorf("failed to clone repository: %s", err.Error())
+		return diag.Errorf("failed to clone repository: %s", err)
 	}
 
 	d.SetId(url)
@@ -119,12 +119,12 @@ func resourceRepositoryCreate(ctx context.Context, d *schema.ResourceData, meta 
 	// Resolve then checkout the specified ref
 	hash, err := repo.ResolveRevision(plumbing.Revision(ref))
 	if err != nil {
-		return diag.Errorf("failed to resolve ref %s: %s", ref, err.Error())
+		return diag.Errorf("failed to resolve ref %s: %s", ref, err)
 	}
 
 	worktree, err := repo.Worktree()
 	if err != nil {
-		return diag.Errorf("failed to get worktree: %s", err.Error())
+		return diag.Errorf("failed to get worktree: %s", err)
 	}
 
 	err = worktree.Checkout(&gogit.CheckoutOptions{
@@ -132,7 +132,7 @@ func resourceRepositoryCreate(ctx context.Context, d *schema.ResourceData, meta 
 		Force: true,
 	})
 	if err != nil {
-		return diag.Errorf("failed to checkout hash %s: %s", hash.String(), err.Error())
+		return diag.Errorf("failed to checkout hash %s: %s", hash.String(), err)
 	}
 
 	return setData(repo, d)
@@ -144,7 +144,7 @@ func resourceRepositoryUpdate(ctx context.Context, d *schema.ResourceData, meta 
 
 	stat, err := os.Stat(dir)
 	if err != nil && !os.IsNotExist(err) {
-		return diag.Errorf("failed to open directory: %s", err.Error())
+		return diag.Errorf("failed to open directory: %s", err)
 	} else if (err != nil && os.IsNotExist(err)) || !stat.IsDir() {
 		// Remove resource from state
 		d.SetId("")
@@ -154,13 +154,13 @@ func resourceRepositoryUpdate(ctx context.Context, d *schema.ResourceData, meta 
 	// Open already cloned repository
 	repo, worktree, err := getRepository(dir)
 	if err != nil {
-		return diag.Errorf("failed to open repository: %s", err.Error())
+		return diag.Errorf("failed to open repository: %s", err)
 	}
 
 	// Resolve the specified ref
 	hash, err := repo.ResolveRevision(plumbing.Revision(ref))
 	if err != nil {
-		return diag.Errorf("failed to resolve ref %s: %s", ref, err.Error())
+		return diag.Errorf("failed to resolve ref %s: %s", ref, err)
 	}
 
 	// Fetch origin updates
@@ -171,7 +171,7 @@ func resourceRepositoryUpdate(ctx context.Context, d *schema.ResourceData, meta 
 	})
 	if err != nil && !errors.Is(err, gogit.NoErrAlreadyUpToDate) &&
 		!errors.Is(err, transport.ErrEmptyUploadPackRequest) { // TODO: https://github.com/go-git/go-git/issues/328
-		return diag.Errorf("failed to fetch updates: %s", err.Error())
+		return diag.Errorf("failed to fetch updates: %s", err)
 	}
 
 	err = worktree.Checkout(&gogit.CheckoutOptions{
@@ -179,7 +179,7 @@ func resourceRepositoryUpdate(ctx context.Context, d *schema.ResourceData, meta 
 		Force: true,
 	})
 	if err != nil {
-		return diag.Errorf("failed to checkout hash %s: %s", hash.String(), err.Error())
+		return diag.Errorf("failed to checkout hash %s: %s", hash.String(), err)
 	}
 
 	return setData(repo, d)
@@ -198,7 +198,7 @@ func setData(repo *gogit.Repository, d *schema.ResourceData) diag.Diagnostics {
 	// Set the HEAD hash output
 	head, err := repo.Head()
 	if err != nil {
-		return diag.Errorf("failed to list branches: %s", err.Error())
+		return diag.Errorf("failed to list branches: %s", err)
 	}
 	d.Set("head", []map[string]string{
 		{
@@ -209,7 +209,7 @@ func setData(repo *gogit.Repository, d *schema.ResourceData) diag.Diagnostics {
 	// Set the branches list output
 	branches, err := repo.Branches()
 	if err != nil {
-		return diag.Errorf("failed to list branches: %s", err.Error())
+		return diag.Errorf("failed to list branches: %s", err)
 	}
 	var branchesData []map[string]string
 	branches.ForEach(func(branch *plumbing.Reference) error {
@@ -225,7 +225,7 @@ func setData(repo *gogit.Repository, d *schema.ResourceData) diag.Diagnostics {
 	// Set the tags list output
 	tags, err := repo.Tags()
 	if err != nil {
-		return diag.Errorf("failed to list tags: %s", err.Error())
+		return diag.Errorf("failed to list tags: %s", err)
 	}
 	var tagsData []map[string]string
 	tags.ForEach(func(tag *plumbing.Reference) error {
