@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/au2001/terraform-provider-git/provider"
+	"github.com/arl-sh/terraform-provider-git/provider"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
 )
 

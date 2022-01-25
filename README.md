@@ -1,8 +1,8 @@
-# terraform-provider-git &nbsp; [![Build Status](https://github.com/au2001/terraform-provider-git/workflows/release/badge.svg)](https://github.com/au2001/terraform-provider-git/actions)
+# terraform-provider-git &nbsp; [![Build Status](https://github.com/arl-sh/terraform-provider-git/workflows/release/badge.svg)](https://github.com/arl-sh/terraform-provider-git/actions)
 
 A [Terraform](http://terraform.io) plugin to manage files in Git repositories.
 
-Available on the Terraform registry as [au2001/git](https://registry.terraform.io/providers/au2001/git).
+Available on the Terraform registry as [arl-sh/git](https://registry.terraform.io/providers/arl-sh/git).
 
 ## Installation
 
@@ -10,7 +10,7 @@ Available on the Terraform registry as [au2001/git](https://registry.terraform.i
 terraform {
   required_providers {
     git = {
-      source  = "au2001/git"
+      source  = "arl-sh/git"
       version = "~> 0.1"
     }
   }
@@ -54,7 +54,7 @@ resource "git_commit" "hello_world" {
 # Read an existing file in the Git repository
 data "git_file" "read_hello_world" {
   repository = git_repository.example.dir
-  path = "path/to/file.txt"
+  path       = "path/to/file.txt"
 }
 
 output "hello_world" {
