@@ -28,7 +28,7 @@ func dataRepository() *schema.Resource {
 				Computed: true,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"hash": {
+						"sha": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
@@ -44,7 +44,7 @@ func dataRepository() *schema.Resource {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
-						"hash": {
+						"sha": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
@@ -60,7 +60,7 @@ func dataRepository() *schema.Resource {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
-						"hash": {
+						"sha": {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
@@ -90,14 +90,14 @@ func dataRepositoryRead(ctx context.Context, d *schema.ResourceData, meta interf
 
 	d.SetId(url)
 
-	// Set the HEAD hash output
+	// Set the HEAD sha output
 	head, err := repo.Head()
 	if err != nil {
 		return diag.Errorf("failed to get HEAD: %s", err)
 	}
 	d.Set("head", []map[string]string{
 		{
-			"hash": head.String(),
+			"sha": head.String(),
 		},
 	})
 
@@ -121,12 +121,12 @@ func dataRepositoryRead(ctx context.Context, d *schema.ResourceData, meta interf
 		if branch.Name().IsBranch() {
 			branchesData = append(branchesData, map[string]string{
 				"name": branch.Name().String()[len("refs/heads/"):],
-				"hash": branch.Hash().String(),
+				"sha":  branch.Hash().String(),
 			})
 		} else if branch.Name().IsTag() {
 			tagsData = append(tagsData, map[string]string{
 				"name": branch.Name().String()[len("refs/tags/"):],
-				"hash": branch.Hash().String(),
+				"sha":  branch.Hash().String(),
 			})
 		}
 	}

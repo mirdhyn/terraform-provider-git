@@ -74,20 +74,20 @@ func dataFileRead(ctx context.Context, d *schema.ResourceData, meta interface{})
 		ref := refI.(string)
 
 		// Resolve then checkout the specified ref
-		hash, err := repo.ResolveRevision(plumbing.Revision(fmt.Sprintf("origin/%s", ref)))
+		sha, err := repo.ResolveRevision(plumbing.Revision(fmt.Sprintf("origin/%s", ref)))
 		if err != nil && errors.Is(err, plumbing.ErrReferenceNotFound) {
-			hash, err = repo.ResolveRevision(plumbing.Revision(ref))
+			sha, err = repo.ResolveRevision(plumbing.Revision(ref))
 		}
 		if err != nil {
 			return diag.Errorf("failed to resolve ref %s: %s", ref, err)
 		}
 
 		err = worktree.Checkout(&gogit.CheckoutOptions{
-			Hash:  *hash,
+			Hash:  *sha,
 			Force: true,
 		})
 		if err != nil {
-			return diag.Errorf("failed to checkout hash %s: %s", hash.String(), err)
+			return diag.Errorf("failed to checkout commit %s: %s", sha.String(), err)
 		}
 	}
 
