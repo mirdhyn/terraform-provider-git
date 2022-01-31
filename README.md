@@ -45,7 +45,7 @@ resource "git_commit" "hello_world" {
   message    = "Create file.txt"
 
   add {
-    file = git_file.hello_world.path
+    path = git_file.hello_world.path
   }
 }
 ```

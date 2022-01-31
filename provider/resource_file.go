@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
+	"io/fs"
 	"path/filepath"
 
 	gogit "github.com/go-git/go-git/v5"
@@ -76,8 +76,9 @@ func resourceFileRead(ctx context.Context, d *schema.ResourceData, meta interfac
 
 	// Open already cloned repository
 	_, worktree, err := getRepository(dir)
-	if err != nil && errors.Is(err, gogit.ErrRepositoryNotExists) {
-		d.SetId("")
+	if err != nil &&
+		(errors.Is(err, gogit.ErrRepositoryNotExists) || errors.Is(err, fs.ErrNotExist)) {
+		d.SetId("") // Removes the resource from state
 		return nil
 	} else if err != nil {
 		return diag.Errorf("failed to open repository: %s", err)
@@ -85,7 +86,7 @@ func resourceFileRead(ctx context.Context, d *schema.ResourceData, meta interfac
 
 	// Open, read then close file
 	file, err := worktree.Filesystem.Open(path)
-	if err != nil && os.IsNotExist(err) {
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
 		d.SetId("")
 		return nil
 	} else if err != nil {
@@ -115,7 +116,10 @@ func resourceFileUpdate(ctx context.Context, d *schema.ResourceData, meta interf
 
 	// Open already cloned repository
 	_, worktree, err := getRepository(dir)
-	if err != nil {
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		d.SetId("") // Removes the resource from state
+		return nil
+	} else if err != nil {
 		return diag.Errorf("failed to open repository: %s", err)
 	}
 
@@ -146,7 +150,9 @@ func resourceFileDelete(ctx context.Context, d *schema.ResourceData, meta interf
 
 	// Open already cloned repository
 	_, worktree, err := getRepository(dir)
-	if err != nil {
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		return nil
+	} else if err != nil {
 		return diag.Errorf("failed to open repository: %s", err)
 	}
 
@@ -154,7 +160,9 @@ func resourceFileDelete(ctx context.Context, d *schema.ResourceData, meta interf
 
 	// Delete file
 	err = worktree.Filesystem.Remove(path)
-	if err != nil {
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		return nil
+	} else if err != nil {
 		return diag.Errorf("failed to remove file: %s", err)
 	}
 

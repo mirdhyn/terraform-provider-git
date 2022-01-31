@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/fs"
 	"io/ioutil"
 	"os"
 
@@ -17,7 +19,7 @@ import (
 func resourceRepository() *schema.Resource {
 	return &schema.Resource{
 		CreateContext: resourceRepositoryCreate,
-		ReadContext:   resourceRepositoryUpdate,
+		ReadContext:   resourceRepositoryRead,
 		UpdateContext: resourceRepositoryUpdate,
 		DeleteContext: resourceRepositoryDelete,
 
@@ -33,6 +35,7 @@ func resourceRepository() *schema.Resource {
 				Optional: true,
 				Default:  "main",
 			},
+			"auth": authSchema(),
 
 			"dir": {
 				Type:     schema.TypeString,
@@ -105,10 +108,14 @@ func resourceRepositoryCreate(ctx context.Context, d *schema.ResourceData, meta 
 	}
 
 	// Clone repository without checking out any ref
-	repo, err := gogit.PlainClone(dir, false, &gogit.CloneOptions{
-		URL:        url,
-		NoCheckout: true,
-		Depth:      1,
+	auth, err := getAuth(d)
+	if err != nil {
+		return diag.Errorf("failed to prepare authentication: %s", err)
+	}
+
+	repo, err := gogit.PlainCloneContext(ctx, dir, false, &gogit.CloneOptions{
+		URL:  url,
+		Auth: auth,
 	})
 	if err != nil {
 		return diag.Errorf("failed to clone repository: %s", err)
@@ -117,7 +124,10 @@ func resourceRepositoryCreate(ctx context.Context, d *schema.ResourceData, meta 
 	d.SetId(url)
 
 	// Resolve then checkout the specified ref
-	hash, err := repo.ResolveRevision(plumbing.Revision(ref))
+	hash, err := repo.ResolveRevision(plumbing.Revision(fmt.Sprintf("origin/%s", ref)))
+	if err != nil && errors.Is(err, plumbing.ErrReferenceNotFound) {
+		hash, err = repo.ResolveRevision(plumbing.Revision(ref))
+	}
 	if err != nil {
 		return diag.Errorf("failed to resolve ref %s: %s", ref, err)
 	}
@@ -135,43 +145,64 @@ func resourceRepositoryCreate(ctx context.Context, d *schema.ResourceData, meta 
 		return diag.Errorf("failed to checkout hash %s: %s", hash.String(), err)
 	}
 
-	return setData(repo, d)
+	return populateData(ctx, repo, auth, d)
 }
+
+var (
+	resourceRepositoryRead = resourceRepositoryUpdate
+)
+
+// func resourceRepositoryRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+// 	dir := d.Get("dir").(string)
+
+// 	// Open already cloned repository
+// 	repo, _, err := getRepository(dir)
+// 	if err != nil && errors.Is(err, fs.ErrNotExist) {
+// 		return resourceRepositoryDelete(ctx, d, meta)
+// 	} else if err != nil {
+// 		return diag.Errorf("failed to open repository: %s", err)
+// 	}
+
+// 	return populateData(ctx, repo, d)
+// }
 
 func resourceRepositoryUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	ref := d.Get("ref").(string)
 	dir := d.Get("dir").(string)
 
-	stat, err := os.Stat(dir)
-	if err != nil && !os.IsNotExist(err) {
-		return diag.Errorf("failed to open directory: %s", err)
-	} else if (err != nil && os.IsNotExist(err)) || !stat.IsDir() {
-		// Remove resource from state
-		d.SetId("")
-		return nil
-	}
-
 	// Open already cloned repository
 	repo, worktree, err := getRepository(dir)
-	if err != nil {
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		return resourceRepositoryDelete(ctx, d, meta)
+	} else if err != nil {
 		return diag.Errorf("failed to open repository: %s", err)
 	}
 
-	// Resolve the specified ref
-	hash, err := repo.ResolveRevision(plumbing.Revision(ref))
+	// Fetch origin updates
+	auth, err := getAuth(d)
 	if err != nil {
-		return diag.Errorf("failed to resolve ref %s: %s", ref, err)
+		return diag.Errorf("failed to prepare authentication: %s", err)
 	}
 
-	// Fetch origin updates
-	err = repo.Fetch(&gogit.FetchOptions{
-		Depth: 1,
+	err = repo.FetchContext(ctx, &gogit.FetchOptions{
 		Tags:  gogit.AllTags,
 		Force: true,
+		Auth:  auth,
 	})
 	if err != nil && !errors.Is(err, gogit.NoErrAlreadyUpToDate) &&
 		!errors.Is(err, transport.ErrEmptyUploadPackRequest) { // TODO: https://github.com/go-git/go-git/issues/328
 		return diag.Errorf("failed to fetch updates: %s", err)
+	}
+
+	// Resolve then checkout the specified ref
+	hash, err := repo.ResolveRevision(plumbing.Revision(fmt.Sprintf("origin/%s", ref)))
+	if err != nil && errors.Is(err, plumbing.ErrReferenceNotFound) {
+		hash, err = repo.ResolveRevision(plumbing.Revision(ref))
+	}
+	if err != nil && errors.Is(err, plumbing.ErrReferenceNotFound) {
+		return resourceRepositoryDelete(ctx, d, meta)
+	} else if err != nil {
+		return diag.Errorf("failed to resolve ref %s: %s", ref, err)
 	}
 
 	err = worktree.Checkout(&gogit.CheckoutOptions{
@@ -182,23 +213,27 @@ func resourceRepositoryUpdate(ctx context.Context, d *schema.ResourceData, meta 
 		return diag.Errorf("failed to checkout hash %s: %s", hash.String(), err)
 	}
 
-	return setData(repo, d)
+	return populateData(ctx, repo, auth, d)
 }
 
 func resourceRepositoryDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	dir := d.Get("dir").(string)
 
-	// Open already cloned repository
-	os.RemoveAll(dir)
+	err := os.RemoveAll(dir)
+	if err != nil {
+		return diag.Errorf("failed to delete directory: %s", err)
+	}
+
+	d.SetId("")
 
 	return nil
 }
 
-func setData(repo *gogit.Repository, d *schema.ResourceData) diag.Diagnostics {
+func populateData(ctx context.Context, repo *gogit.Repository, auth transport.AuthMethod, d *schema.ResourceData) diag.Diagnostics {
 	// Set the HEAD hash output
 	head, err := repo.Head()
 	if err != nil {
-		return diag.Errorf("failed to list branches: %s", err)
+		return diag.Errorf("failed to get HEAD: %s", err)
 	}
 	d.Set("head", []map[string]string{
 		{
@@ -206,36 +241,36 @@ func setData(repo *gogit.Repository, d *schema.ResourceData) diag.Diagnostics {
 		},
 	})
 
-	// Set the branches list output
-	branches, err := repo.Branches()
+	// Fetch all remote refs
+	remote, err := repo.Remote("origin")
 	if err != nil {
-		return diag.Errorf("failed to list branches: %s", err)
+		return diag.Errorf("failed to retrieve remote: %s", err)
 	}
+
+	refs, err := remote.ListContext(ctx, &gogit.ListOptions{
+		Auth: auth,
+	})
+	if err != nil {
+		return diag.Errorf("failed to list remote refs: %s", err)
+	}
+
+	// Separate branch and tag refs
 	var branchesData []map[string]string
-	branches.ForEach(func(branch *plumbing.Reference) error {
-		branchesData = append(branchesData, map[string]string{
-			"name": branch.Name().String()[len("refs/heads/"):],
-			"hash": branch.Hash().String(),
-		})
-
-		return nil
-	})
-	d.Set("branches", branchesData)
-
-	// Set the tags list output
-	tags, err := repo.Tags()
-	if err != nil {
-		return diag.Errorf("failed to list tags: %s", err)
-	}
 	var tagsData []map[string]string
-	tags.ForEach(func(tag *plumbing.Reference) error {
-		tagsData = append(tagsData, map[string]string{
-			"name": tag.Name().String()[len("refs/tags/"):],
-			"hash": tag.Hash().String(),
-		})
-
-		return nil
-	})
+	for _, branch := range refs {
+		if branch.Name().IsBranch() {
+			branchesData = append(branchesData, map[string]string{
+				"name": branch.Name().String()[len("refs/heads/"):],
+				"hash": branch.Hash().String(),
+			})
+		} else if branch.Name().IsTag() {
+			tagsData = append(tagsData, map[string]string{
+				"name": branch.Name().String()[len("refs/tags/"):],
+				"hash": branch.Hash().String(),
+			})
+		}
+	}
+	d.Set("branches", branchesData)
 	d.Set("tags", tagsData)
 
 	return nil

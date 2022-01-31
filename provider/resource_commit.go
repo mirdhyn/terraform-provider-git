@@ -2,8 +2,13 @@ package provider
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io/fs"
 
-	"github.com/go-git/go-git/v5"
+	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -39,7 +44,7 @@ func resourceCommit() *schema.Resource {
 				MinItems: 1,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"file": {
+						"path": {
 							Type:     schema.TypeString,
 							Optional: true,
 							ForceNew: true,
@@ -53,9 +58,14 @@ func resourceCommit() *schema.Resource {
 				},
 				ForceNew: true,
 			},
+			"auth": authSchema(),
 
 			"sha": {
 				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"new": {
+				Type:     schema.TypeBool,
 				Computed: true,
 			},
 		},
@@ -64,12 +74,12 @@ func resourceCommit() *schema.Resource {
 
 func resourceCommitCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	dir := d.Get("repository").(string)
-	// branch := d.Get("branch").(string)
+	branch := d.Get("branch").(string)
 	message := d.Get("message").(string)
 	items := d.Get("add").([]interface{})
 
 	// Open already cloned repository
-	_, worktree, err := getRepository(dir)
+	repo, worktree, err := getRepository(dir)
 	if err != nil {
 		return diag.Errorf("failed to open repository: %s", err)
 	}
@@ -77,64 +87,19 @@ func resourceCommitCreate(ctx context.Context, d *schema.ResourceData, meta inte
 	// Stage files
 	for _, item := range items {
 		if pattern, ok := item.(map[string]interface{})["pattern"]; ok {
-			err := worktree.AddGlob(pattern.(string))
+			err := worktree.AddWithOptions(&gogit.AddOptions{
+				Glob: pattern.(string),
+			})
 			if err != nil {
 				return diag.Errorf("failed to stage pattern %s: %s", pattern, err)
 			}
 		}
-		if file, ok := item.(map[string]interface{})["file"]; ok {
-			_, err := worktree.Add(file.(string))
-			if err != nil {
-				return diag.Errorf("failed to stage file %s: %s", file, err)
-			}
-		}
-	}
-
-	// Commit
-	sha, err := worktree.Commit(message, &git.CommitOptions{})
-	if err != nil {
-		return diag.Errorf("failed to commit: %s", err)
-	}
-
-	d.SetId(sha.String())
-	d.Set("sha", sha.String())
-
-	// Push
-	// err = repo.Push(&git.PushOptions{
-	// 	RefSpecs: []config.RefSpec{
-	// 		config.RefSpec(fmt.Sprintf("+HEAD:refs/remotes/origin/%s", branch)),
-	// 	},
-	// 	Force: true,
-	// })
-	// if err != nil {
-	// 	return diag.Errorf("failed to push: %s", err)
-	// }
-
-	return nil
-}
-
-func resourceCommitRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	dir := d.Get("repository").(string)
-	items := d.Get("add").([]interface{})
-
-	// Open already cloned repository
-	_, worktree, err := getRepository(dir)
-	if err != nil {
-		return diag.Errorf("failed to open repository: %s", err)
-	}
-
-	// Stage files
-	for _, item := range items {
-		if pattern, ok := item.(map[string]interface{})["pattern"]; ok {
-			err := worktree.AddGlob(pattern.(string))
-			if err != nil {
-				return diag.Errorf("failed to stage pattern %s: %s", pattern, err)
-			}
-		}
-		if file, ok := item.(map[string]interface{})["file"]; ok {
-			_, err := worktree.Add(file.(string))
+		if path, ok := item.(map[string]interface{})["path"]; ok {
+			err := worktree.AddWithOptions(&gogit.AddOptions{
+				Path: path.(string),
+			})
 			if err != nil && err.Error() != object.ErrEntryNotFound.Error() {
-				return diag.Errorf("failed to stage file %s: %s", file, err)
+				return diag.Errorf("failed to stage path %s: %s", path, err)
 			}
 		}
 	}
@@ -145,6 +110,74 @@ func resourceCommitRead(ctx context.Context, d *schema.ResourceData, meta interf
 		return diag.Errorf("failed to compute worktree status: %s", err)
 	}
 	if status.IsClean() {
+		sha, err := repo.ResolveRevision(plumbing.Revision(plumbing.HEAD))
+		if err != nil {
+			return diag.Errorf("failed to get existing commit: %s", err)
+		}
+
+		d.SetId(sha.String())
+		d.Set("sha", sha.String())
+		d.Set("new", false)
+
+		return nil
+	}
+
+	// Commit
+	sha, err := worktree.Commit(message, &gogit.CommitOptions{})
+	if err != nil {
+		return diag.Errorf("failed to commit: %s", err)
+	}
+
+	// Update branch
+	branchRef := plumbing.NewBranchReferenceName(branch)
+	hashRef := plumbing.NewHashReference(branchRef, sha)
+	err = repo.Storer.SetReference(hashRef)
+	if err != nil {
+		return diag.Errorf("failed to set branch ref: %s", err)
+	}
+
+	// Push
+	auth, err := getAuth(d)
+	if err != nil {
+		return diag.Errorf("failed to prepare authentication: %s", err)
+	}
+
+	err = repo.PushContext(ctx, &gogit.PushOptions{
+		RefSpecs: []config.RefSpec{
+			config.RefSpec(fmt.Sprintf("%s:%s", branchRef, branchRef)),
+		},
+		// Force: true,
+		Auth: auth,
+	})
+	if err != nil {
+		return diag.Errorf("failed to push: %s", err)
+	}
+
+	d.SetId(sha.String())
+	d.Set("sha", sha.String())
+	d.Set("new", true)
+
+	return nil
+}
+
+func resourceCommitRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+	dir := d.Get("repository").(string)
+
+	// Open already cloned repository
+	_, worktree, err := getRepository(dir)
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		d.SetId("") // Removes the resource from state
+		return nil
+	} else if err != nil {
+		return diag.Errorf("failed to open repository: %s", err)
+	}
+
+	// Check if worktree is clean
+	status, err := worktree.Status()
+	if err != nil {
+		return diag.Errorf("failed to compute worktree status: %s", err)
+	}
+	if !status.IsClean() {
 		d.SetId("")
 		return nil
 	}

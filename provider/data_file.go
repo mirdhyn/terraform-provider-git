@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"io"
+	"io/fs"
 	"path/filepath"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -37,17 +39,23 @@ func dataFileRead(ctx context.Context, d *schema.ResourceData, meta interface{})
 
 	// Open already cloned repository
 	_, worktree, err := getRepository(dir)
-	if err != nil {
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		d.SetId("") // Removes the resource from state
+		return nil
+	} else if err != nil {
 		return diag.Errorf("failed to open repository: %s", err)
 	}
 
-	d.SetId(filepath.Join(dir, path))
-
 	// Open, read then close file
 	file, err := worktree.Filesystem.Open(path)
-	if err != nil {
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		d.SetId("")
+		return nil
+	} else if err != nil {
 		return diag.Errorf("failed to open file: %s", err)
 	}
+
+	d.SetId(filepath.Join(dir, path))
 
 	content, err := io.ReadAll(file)
 	if err != nil {
