@@ -3,6 +3,7 @@ module github.com/arl-sh/terraform-provider-git
 go 1.17
 
 require (
+	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.10.1
 	golang.org/x/crypto v0.0.0-20220112180741-5e0467b6c7ce
@@ -18,7 +19,6 @@ require (
 	github.com/emirpasic/gods v1.12.0 // indirect
 	github.com/fatih/color v1.7.0 // indirect
 	github.com/go-git/gcfg v1.5.0 // indirect
-	github.com/go-git/go-billy/v5 v5.3.1 // indirect
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect

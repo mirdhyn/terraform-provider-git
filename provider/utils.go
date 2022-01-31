@@ -2,11 +2,7 @@ package provider
 
 import (
 	"errors"
-	"fmt"
-	"io/fs"
-	"os"
 
-	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
@@ -167,28 +163,4 @@ func getAuth(d *schema.ResourceData) (transport.AuthMethod, error) {
 	}
 
 	return nil, errors.New("unknown auth method")
-}
-
-func getRepository(dir string) (*gogit.Repository, *gogit.Worktree, error) {
-	// Check directory exists
-	stat, err := os.Stat(dir)
-	if err != nil {
-		return nil, nil, err
-	} else if !stat.IsDir() {
-		return nil, nil, fmt.Errorf("%w: repository path is not a directory", fs.ErrNotExist)
-	}
-
-	// Open existing repository
-	repo, err := gogit.PlainOpen(dir)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Get the current worktree
-	worktree, err := repo.Worktree()
-	if err != nil {
-		return repo, nil, err
-	}
-
-	return repo, worktree, nil
 }

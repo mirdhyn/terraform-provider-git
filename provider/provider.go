@@ -8,12 +8,11 @@ func Provider() *schema.Provider {
 	return &schema.Provider{
 		Schema: map[string]*schema.Schema{},
 		ResourcesMap: map[string]*schema.Resource{
-			"git_repository": resourceRepository(),
-			"git_file":       resourceFile(),
-			"git_commit":     resourceCommit(),
+			"git_commit": resourceCommit(),
 		},
 		DataSourcesMap: map[string]*schema.Resource{
-			"git_file": dataFile(),
+			"git_repository": dataRepository(),
+			"git_file":       dataFile(),
 		},
 		ConfigureFunc: providerConfigure,
 	}

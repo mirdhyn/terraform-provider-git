@@ -4,14 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
+	"io"
 
+	"github.com/go-git/go-billy/v5/memfs"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 )
 
 func resourceCommit() *schema.Resource {
@@ -21,15 +23,15 @@ func resourceCommit() *schema.Resource {
 		DeleteContext: schema.NoopContext,
 
 		Schema: map[string]*schema.Schema{
-			"repository": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
+			"url": {
+				Type:         schema.TypeString,
+				Required:     true,
+				ForceNew:     true,
+				ValidateFunc: validation.IsURLWithScheme([]string{"http", "https", "ssh"}),
 			},
 			"branch": {
 				Type:     schema.TypeString,
-				Optional: true,
-				Default:  "main",
+				Required: true,
 				ForceNew: true,
 			},
 			"message": {
@@ -46,12 +48,12 @@ func resourceCommit() *schema.Resource {
 					Schema: map[string]*schema.Schema{
 						"path": {
 							Type:     schema.TypeString,
-							Optional: true,
+							Required: true,
 							ForceNew: true,
 						},
-						"pattern": {
+						"content": {
 							Type:     schema.TypeString,
-							Optional: true,
+							Required: true,
 							ForceNew: true,
 						},
 					},
@@ -73,35 +75,76 @@ func resourceCommit() *schema.Resource {
 }
 
 func resourceCommitCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	dir := d.Get("repository").(string)
+	url := d.Get("url").(string)
 	branch := d.Get("branch").(string)
 	message := d.Get("message").(string)
 	items := d.Get("add").([]interface{})
 
-	// Open already cloned repository
-	repo, worktree, err := getRepository(dir)
+	// Clone repository
+	auth, err := getAuth(d)
 	if err != nil {
-		return diag.Errorf("failed to open repository: %s", err)
+		return diag.Errorf("failed to prepare authentication: %s", err)
+	}
+
+	repo, err := gogit.CloneContext(ctx, memory.NewStorage(), memfs.New(), &gogit.CloneOptions{
+		URL:  url,
+		Auth: auth,
+	})
+	if err != nil {
+		return diag.Errorf("failed to clone repository: %s", err)
+	}
+
+	// Get the current worktree
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return diag.Errorf("failed to get worktree: %s", err)
+	}
+
+	// Resolve then checkout the specified branch
+	sha, err := repo.ResolveRevision(plumbing.Revision(plumbing.NewRemoteReferenceName("origin", branch)))
+	if err != nil && errors.Is(err, plumbing.ErrReferenceNotFound) {
+		sha, err = repo.ResolveRevision(plumbing.Revision(plumbing.NewBranchReferenceName(branch)))
+	}
+	if err != nil {
+		return diag.Errorf("failed to resolve branch %s: %s", branch, err)
+	}
+
+	err = worktree.Checkout(&gogit.CheckoutOptions{
+		Hash:  *sha,
+		Force: true,
+	})
+	if err != nil {
+		return diag.Errorf("failed to checkout hash %s: %s", sha.String(), err)
+	}
+
+	// Write files
+	for _, item := range items {
+		path := item.(map[string]interface{})["path"].(string)
+		content := item.(map[string]interface{})["content"].(string)
+
+		// Create, write then close file
+		file, err := worktree.Filesystem.Create(path)
+		if err != nil {
+			return diag.Errorf("failed to create file: %s", err)
+		}
+
+		_, err = io.WriteString(file, content)
+		if err != nil {
+			return diag.Errorf("failed to write to file: %s", err)
+		}
+
+		err = file.Close()
+		if err != nil {
+			return diag.Errorf("failed to close file: %s", err)
+		}
 	}
 
 	// Stage files
-	for _, item := range items {
-		if pattern, ok := item.(map[string]interface{})["pattern"]; ok {
-			err := worktree.AddWithOptions(&gogit.AddOptions{
-				Glob: pattern.(string),
-			})
-			if err != nil {
-				return diag.Errorf("failed to stage pattern %s: %s", pattern, err)
-			}
-		}
-		if path, ok := item.(map[string]interface{})["path"]; ok {
-			err := worktree.AddWithOptions(&gogit.AddOptions{
-				Path: path.(string),
-			})
-			if err != nil && err.Error() != object.ErrEntryNotFound.Error() {
-				return diag.Errorf("failed to stage path %s: %s", path, err)
-			}
-		}
+	err = worktree.AddWithOptions(&gogit.AddOptions{
+		All: true,
+	})
+	if err != nil {
+		return diag.Errorf("failed to stage files: %s", err)
 	}
 
 	// Check if worktree is clean
@@ -123,53 +166,99 @@ func resourceCommitCreate(ctx context.Context, d *schema.ResourceData, meta inte
 	}
 
 	// Commit
-	sha, err := worktree.Commit(message, &gogit.CommitOptions{})
+	commitSha, err := worktree.Commit(message, &gogit.CommitOptions{})
 	if err != nil {
 		return diag.Errorf("failed to commit: %s", err)
 	}
 
 	// Update branch
 	branchRef := plumbing.NewBranchReferenceName(branch)
-	hashRef := plumbing.NewHashReference(branchRef, sha)
+	hashRef := plumbing.NewHashReference(branchRef, commitSha)
 	err = repo.Storer.SetReference(hashRef)
 	if err != nil {
 		return diag.Errorf("failed to set branch ref: %s", err)
 	}
 
 	// Push
-	auth, err := getAuth(d)
-	if err != nil {
-		return diag.Errorf("failed to prepare authentication: %s", err)
-	}
-
 	err = repo.PushContext(ctx, &gogit.PushOptions{
 		RefSpecs: []config.RefSpec{
 			config.RefSpec(fmt.Sprintf("%s:%s", branchRef, branchRef)),
 		},
-		// Force: true,
 		Auth: auth,
 	})
 	if err != nil {
 		return diag.Errorf("failed to push: %s", err)
 	}
 
-	d.SetId(sha.String())
-	d.Set("sha", sha.String())
+	d.SetId(commitSha.String())
+	d.Set("sha", commitSha.String())
 	d.Set("new", true)
 
 	return nil
 }
 
 func resourceCommitRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	dir := d.Get("repository").(string)
+	url := d.Get("url").(string)
+	branch := d.Get("branch").(string)
+	items := d.Get("add").([]interface{})
 
-	// Open already cloned repository
-	_, worktree, err := getRepository(dir)
-	if err != nil && errors.Is(err, fs.ErrNotExist) {
-		d.SetId("") // Removes the resource from state
-		return nil
-	} else if err != nil {
-		return diag.Errorf("failed to open repository: %s", err)
+	// Clone repository
+	auth, err := getAuth(d)
+	if err != nil {
+		return diag.Errorf("failed to prepare authentication: %s", err)
+	}
+
+	repo, err := gogit.CloneContext(ctx, memory.NewStorage(), memfs.New(), &gogit.CloneOptions{
+		URL:  url,
+		Auth: auth,
+	})
+	if err != nil {
+		return diag.Errorf("failed to clone repository: %s", err)
+	}
+
+	// Get the current worktree
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return diag.Errorf("failed to get worktree: %s", err)
+	}
+
+	// Resolve then checkout the specified branch
+	sha, err := repo.ResolveRevision(plumbing.Revision(plumbing.NewRemoteReferenceName("origin", branch)))
+	if err != nil && errors.Is(err, plumbing.ErrReferenceNotFound) {
+		sha, err = repo.ResolveRevision(plumbing.Revision(plumbing.NewBranchReferenceName(branch)))
+	}
+	if err != nil {
+		return diag.Errorf("failed to resolve branch %s: %s", branch, err)
+	}
+
+	err = worktree.Checkout(&gogit.CheckoutOptions{
+		Hash:  *sha,
+		Force: true,
+	})
+	if err != nil {
+		return diag.Errorf("failed to checkout hash %s: %s", sha.String(), err)
+	}
+
+	// Write files
+	for _, item := range items {
+		path := item.(map[string]interface{})["path"].(string)
+		content := item.(map[string]interface{})["content"].(string)
+
+		// Create, write then close file
+		file, err := worktree.Filesystem.Create(path)
+		if err != nil {
+			return diag.Errorf("failed to create file: %s", err)
+		}
+
+		_, err = io.WriteString(file, content)
+		if err != nil {
+			return diag.Errorf("failed to write to file: %s", err)
+		}
+
+		err = file.Close()
+		if err != nil {
+			return diag.Errorf("failed to close file: %s", err)
+		}
 	}
 
 	// Check if worktree is clean
@@ -181,6 +270,10 @@ func resourceCommitRead(ctx context.Context, d *schema.ResourceData, meta interf
 		d.SetId("")
 		return nil
 	}
+
+	d.SetId(sha.String())
+	d.Set("sha", sha.String())
+	d.Set("new", false)
 
 	return nil
 }
