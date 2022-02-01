@@ -105,7 +105,9 @@ resource "git_commit" "example_write" {
   # ...
 
   auth {
-    token = "example_token_123"
+    bearer {
+      token = "example_token_123"
+    }
   }
 }
 ```
@@ -118,8 +120,10 @@ resource "git_commit" "example_write" {
   # ...
 
   auth {
-    username = "example"
-    password = "123"
+    basic {
+      username = "example"
+      password = "123"
+    }
   }
 }
 ```
@@ -132,7 +136,7 @@ resource "git_commit" "example_write" {
   # ...
 
   auth {
-    ssh {
+    ssh_key {
       username         = "example"
       private_key_path = "/home/user/.ssh/id_rsa"
       password         = "key_passphrase_123"
@@ -150,7 +154,7 @@ resource "git_commit" "example_write" {
   # ...
 
   auth {
-    ssh {
+    ssh_key {
       username = "example"
       private_key_pem = <<-EOT
       -----BEGIN RSA PRIVATE KEY-----
