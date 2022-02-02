@@ -11,7 +11,7 @@ terraform {
   required_providers {
     git = {
       source  = "arl-sh/git"
-      version = "~> 1.0"
+      version = "~> 0.3"
     }
   }
 }
@@ -25,9 +25,11 @@ Then, run `terraform init`.
 ```hcl
 # Write to a list of files within a Git repository, then commit and push the changes
 resource "git_commit" "example_write" {
-  url     = "https://example.com/repo-name"
-  branch  = "main"
-  message = "Create txt and JSON files"
+  url            = "https://example.com/repo-name"
+  branch         = "main"
+  message        = "Create txt and JSON files"
+  update_message = "Update txt and JSON files"
+  delete_message = "Delete txt and JSON files"
 
   add {
     path    = "path/to/file.txt"
@@ -38,6 +40,8 @@ resource "git_commit" "example_write" {
     path    = "path/to/file.json"
     content = jsonencode({ hello = "world" })
   }
+
+  prune = true
 }
 
 output "commit_sha" {

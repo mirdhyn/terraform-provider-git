@@ -15,7 +15,6 @@ func authSchema() *schema.Schema {
 		Type:     schema.TypeList,
 		Optional: true,
 		MaxItems: 1,
-		ForceNew: true,
 		Elem: &schema.Resource{
 			Schema: map[string]*schema.Schema{
 				"bearer": {
