@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"time"
 
 	"github.com/go-git/go-billy/v5/memfs"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/format/index"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -179,7 +182,13 @@ func resourceCommitCreate(ctx context.Context, d *schema.ResourceData, meta inte
 	}
 
 	// Commit
-	commitSha, err := worktree.Commit(message, &gogit.CommitOptions{})
+	commitSha, err := worktree.Commit(message, &gogit.CommitOptions{
+		Author: &object.Signature{
+			Name:  os.Getenv("GIT_AUTHOR_NAME"),
+			Email: os.Getenv("GIT_AUTHOR_EMAIL"),
+			When:  time.Now(),
+		},
+	})
 	if err != nil {
 		return diag.Errorf("failed to commit: %s", err)
 	}
@@ -408,7 +417,13 @@ func resourceCommitUpdate(ctx context.Context, d *schema.ResourceData, meta inte
 	}
 
 	// Commit
-	commitSha, err := worktree.Commit(message, &gogit.CommitOptions{})
+	commitSha, err := worktree.Commit(message, &gogit.CommitOptions{
+		Author: &object.Signature{
+			Name:  os.Getenv("GIT_AUTHOR_NAME"),
+			Email: os.Getenv("GIT_AUTHOR_EMAIL"),
+			When:  time.Now(),
+		},
+	})
 	if err != nil {
 		return diag.Errorf("failed to commit: %s", err)
 	}
@@ -521,7 +536,13 @@ func resourceCommitDelete(ctx context.Context, d *schema.ResourceData, meta inte
 	}
 
 	// Commit
-	commitSha, err := worktree.Commit(message, &gogit.CommitOptions{})
+	commitSha, err := worktree.Commit(message, &gogit.CommitOptions{
+		Author: &object.Signature{
+			Name:  os.Getenv("GIT_AUTHOR_NAME"),
+			Email: os.Getenv("GIT_AUTHOR_EMAIL"),
+			When:  time.Now(),
+		},
+	})
 	if err != nil {
 		return diag.Errorf("failed to commit: %s", err)
 	}
